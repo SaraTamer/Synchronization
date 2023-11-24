@@ -1,3 +1,6 @@
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.*;
 
 public class Network {
@@ -9,61 +12,62 @@ public class Network {
         System.out.println("What is the number of WI-FI Connections?");
         Scanner in = new Scanner(System.in);
         nConnections = in.nextInt();
-        System.out.println("What is the number of devices Clients want to connect?\n");
+        System.out.println("What is the number of devices Clients want to connect?");
         TC = in.nextInt();
+        router.setMaxSize(nConnections);
         TCLines = new ArrayList<>(TC);
         for(int i = 0; i < TC; i++)
         {
-            TCLines.add(new Device());
+            TCLines.add(new Device(router));
             TCLines.get(i).setdName(in.next());
             TCLines.get(i).setdType(in.next());
         }
-        router.setMaxSize(nConnections);
         for (Device device: TCLines)
         {
-            router.occupy(device);
+            device.start();
         }
     }
 
 }
-
 class Router {
     private int maxSize;
-    private int size;
     private int inptr;
     private int outptr;
-    public ArrayList<Device> connections;
+    public Boolean connections[];
+    Semaphore semaphore;
     public Router()
     {
-        this.size = 0;
-        connections = new ArrayList<>(maxSize);
-        inptr = 0;
-        outptr = 0;
     }
-
-    public void occupy(Device device)
+    public int occupy(Device device) throws IOException {
+        semaphore.P(device);
+        int temp = 0;
+        for(int i = 0; i < maxSize; i++)
+        {
+            if(!connections[i])
+            {
+                connections[i] = true;
+                temp = i;
+                break;
+            }
+        }
+        String out = "- Connection " + (temp+1) + ": " + device.getdName() +" Occupied";
+        FileWriter output = new FileWriter(new File("Output.txt"), true);
+        output.write(out + '\n');
+        output.close();
+        return temp;
+    }
+    public void release(int i)
     {
-       if(size < maxSize)
-       {
-           size++;
-           connections.add(inptr, device);
-           inptr = (inptr + 1) % maxSize;
-           System.out.println(device.getdName() + " (" + device.getdType() + ")  arrived");
-           device.connect();
-       }
-       else {
-           System.out.println(device.getdName() + " (" + device.getdType() + ")  arrived and waiting");
-           release(device);
-       }
+        connections[i]= false;
+        semaphore.V();
     }
-    public void release(Device device)
+    public void setMaxSize(int s)
     {
-        connections.get(outptr).logOut();
-        outptr = (outptr + 1) % maxSize;
-        size--;
-        occupy(device);
+        this.maxSize = s;
+        connections = new Boolean[maxSize];
+        Arrays.fill(connections, Boolean.FALSE);
+        semaphore = new Semaphore(maxSize);
     }
-    public void setMaxSize(int s){this.maxSize = s;}
 }
 class Semaphore {
     protected int value;
@@ -71,67 +75,84 @@ class Semaphore {
     {
         value = initial ;
     }
-    public synchronized void P(int pos) {
+    public synchronized void P(Device device) throws IOException {
         value-- ;
         if (value < 0){
             try {
+                String out = device.getdName() + " (" + device.getdType() + ")  arrived and waiting";
+                File outfile = new File("Output.txt");
+                FileWriter output = new FileWriter(outfile, true);
+                output.write(out + '\n');
+                output.close();
                 wait();
             }
             catch( InterruptedException e )
             {
-                System.out.print(" ");
+
             }
         }
-        System.out.println("Connection " + pos + ": " + Network.router.connections.get(pos).getdName() +" occupied");
+        else
+        {
+            String out = device.getdName() + " (" + device.getdType() + ")  arrived";
+            FileWriter output = new FileWriter(new File("Output.txt"), true);
+            output.write(out + '\n');
+            output.close();
+
+        }
     }
-    public synchronized void V(int pos) {
+    public synchronized void V() {
         value++;
         if (value <= 0)
         {
             notify();
-            System.out.println("Connection " + pos + ": " + Network.router.connections.get(pos).getdName() +" logged out");
         }
     }
 }
 class Device extends Thread{
     Semaphore semaphore = new Semaphore(Network.nConnections);
+    Router router;
     private String dName;
     private String dType;
-    public void connect()
+    public Device(Router router)
     {
-        int pos = 0;
-        for(int i = 0; i < Network.router.connections.size(); i++)
-        {
-            if(Objects.equals(Network.router.connections.get(i).getdName(), this.dName))
-                pos = i;
-        }
-        semaphore.P(pos);
-        performOnlineActivity();
+        this.router = router;
     }
-    public void performOnlineActivity()
-    {
-        int pos = 0;
-        for(int i = 0; i < Network.router.connections.size(); i++)
-        {
-            if(Objects.equals(Network.router.connections.get(i).getdName(), this.dName))
-                pos = i;
-        }
-        System.out.println("Connection " + pos + ": " + this.dName + " perform online activity");
+    public void login(int pos) throws IOException {
+        String out = "- Connection " + pos + ": " + dName + " login";
+        FileWriter output = new FileWriter(new File("Output.txt"), true);
+        output.write(out + '\n');
+        output.close();
     }
-    public void logOut()
-    {
-        int pos = 0;
-        for(int i = 0; i < Network.router.connections.size(); i++)
-        {
-            if(Objects.equals(Network.router.connections.get(i).getdName(), this.dName))
-                pos = i;
-        }
-
-        semaphore.V(pos);
+    public void performOnlineActivity(int pos) throws IOException {
+        String out = "- Connection " + pos + ": " + this.dName + " perform online activity";
+        FileWriter output = new FileWriter(new File("Output.txt"), true);
+        output.write(out + '\n');
+        output.close();
+    }
+    public void logOut(int pos) throws IOException {
+        String out = "- Connection " + pos + ": " + this.dName + " logout";
+        FileWriter output = new FileWriter(new File("Output.txt"), true);
+        output.write(out + '\n');
+        output.close();
     }
     public void setdName(String name){this.dName = name;}
     public void setdType(String type){this.dType = type;}
     public String getdName(){return dName;}
     public String getdType(){return dType;}
-
+    public void run()
+    {
+        File output = new File("Output.txt");
+        output.delete();
+        int position = 0;
+        try {
+            position = router.occupy(this);
+            sleep(1000);
+            login(position+1 );
+            performOnlineActivity(position + 1);
+            logOut(position + 1);
+        } catch (IOException | InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        router.release(position);
+    }
 }
