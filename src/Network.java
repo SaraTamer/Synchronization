@@ -4,130 +4,134 @@ public class Network {
     static Router router = new Router();
     static int nConnections;
     static int TC;
-    public static Map<String,String> TCLines;
+    public static ArrayList<Device> TCLines;
     public static void main(String[] args) {
         System.out.println("What is the number of WI-FI Connections?");
         Scanner in = new Scanner(System.in);
         nConnections = in.nextInt();
         System.out.println("What is the number of devices Clients want to connect?\n");
         TC = in.nextInt();
-        TCLines = new HashMap<>(TC);
+        TCLines = new ArrayList<>(TC);
         for(int i = 0; i < TC; i++)
         {
-            TCLines.put(in.next(), in.next());
+            TCLines.add(new Device());
+            TCLines.get(i).setdName(in.next());
+            TCLines.get(i).setdType(in.next());
+        }
+        router.setMaxSize(nConnections);
+        for (Device device: TCLines)
+        {
+            router.occupy(device);
         }
     }
+
 }
 
-
 class Router {
+    private int maxSize;
     private int size;
-    private ArrayList<Object> connections;
-    private int inptr = 0;
-    private int outptr = 0;
-    private Semaphore empty;
-    private Semaphore connected;
-    public Router(){};
-    public Router(int size){
-        this.size= size;
-        connections = new ArrayList<>(size);
-        empty = new Semaphore(size);
-        connected = new Semaphore(0);
-    }
-    public void occupy(Object value)
+    private int inptr;
+    private int outptr;
+    public ArrayList<Device> connections;
+    public Router()
     {
-        empty.P();
-        connections.set(inptr, value);
-        inptr = (inptr + 1) % size;
-        connected.V();
+        this.size = 0;
+        connections = new ArrayList<>(maxSize);
+        inptr = 0;
+        outptr = 0;
     }
-    public Object release()
+
+    public void occupy(Device device)
     {
-        Object value;
-        connected.P();
-        value = connections.get(outptr);
-        outptr = (outptr + 1) % size;
-        empty.V();
-        return value;
+       if(size < maxSize)
+       {
+           size++;
+           connections.add(inptr, device);
+           inptr = (inptr + 1) % maxSize;
+           System.out.println(device.getdName() + " (" + device.getdType() + ")  arrived");
+           device.connect();
+       }
+       else {
+           System.out.println(device.getdName() + " (" + device.getdType() + ")  arrived and waiting");
+           release(device);
+       }
     }
-    public int getOutptr()
+    public void release(Device device)
     {
-        return outptr;
+        connections.get(outptr).logOut();
+        outptr = (outptr + 1) % maxSize;
+        size--;
+        occupy(device);
     }
+    public void setMaxSize(int s){this.maxSize = s;}
 }
 class Semaphore {
     protected int value;
-    protected Semaphore()
-    {
-        value = 0 ;
-    }
     protected Semaphore(int initial)
     {
         value = initial ;
     }
-    public synchronized void P() {
-
+    public synchronized void P(int pos) {
         value-- ;
         if (value < 0){
             try {
-                wait() ;
+                wait();
             }
             catch( InterruptedException e )
             {
-                System.out.println("Waiting");
+                System.out.print(" ");
             }
         }
-        System.out.println("Occupied");
+        System.out.println("Connection " + pos + ": " + Network.router.connections.get(pos).getdName() +" occupied");
     }
-    public synchronized void V() {
+    public synchronized void V(int pos) {
         value++;
         if (value <= 0)
         {
             notify();
-            System.out.println("logout");
+            System.out.println("Connection " + pos + ": " + Network.router.connections.get(pos).getdName() +" logged out");
         }
-
     }
 }
 class Device extends Thread{
-    Router router;
+    Semaphore semaphore = new Semaphore(Network.nConnections);
+    private String dName;
+    private String dType;
     public void connect()
     {
-        for(int i = 0; i < Network.TCLines.size(); i++)
+        int pos = 0;
+        for(int i = 0; i < Network.router.connections.size(); i++)
         {
-            router.occupy(Network.TCLines.get(i));
+            if(Objects.equals(Network.router.connections.get(i).getdName(), this.dName))
+                pos = i;
         }
+        semaphore.P(pos);
+        performOnlineActivity();
     }
     public void performOnlineActivity()
     {
-
+        int pos = 0;
+        for(int i = 0; i < Network.router.connections.size(); i++)
+        {
+            if(Objects.equals(Network.router.connections.get(i).getdName(), this.dName))
+                pos = i;
+        }
+        System.out.println("Connection " + pos + ": " + this.dName + " perform online activity");
     }
     public void logOut()
     {
-
-    }
-}
-
-class Producer extends Thread {
-    private Router router;
-    public  Producer(Router router){this.router = router;}
-    public void run()
-    {
-        for(int i = 0; i < Network.TCLines.size(); i++)
+        int pos = 0;
+        for(int i = 0; i < Network.router.connections.size(); i++)
         {
-            router.occupy(Network.TCLines.get(i));
+            if(Objects.equals(Network.router.connections.get(i).getdName(), this.dName))
+                pos = i;
         }
+
+        semaphore.V(pos);
     }
-}
-class Consumer extends Thread{
-    private Router router;
-    public Consumer(Router router){this.router = router;}
-    public void run()
-    {
-        for (int i = 0; i < Network.TCLines.size(); i++)
-        {
-            System.out.println(router.getOutptr());
-            System.out.println(router.release());
-        }
-    }
+    public void setdName(String name){this.dName = name;}
+    public void setdType(String type){this.dType = type;}
+    public String getdName(){return dName;}
+    public String getdType(){return dType;}
+
 }
