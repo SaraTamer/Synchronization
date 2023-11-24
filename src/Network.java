@@ -31,13 +31,8 @@ public class Network {
 }
 class Router {
     private int maxSize;
-    private int inptr;
-    private int outptr;
     public Boolean connections[];
     Semaphore semaphore;
-    public Router()
-    {
-    }
     public int occupy(Device device) throws IOException {
         semaphore.P(device);
         int temp = 0;
